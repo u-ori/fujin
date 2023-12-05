@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 rustls = "0.22.0"
+hyper = { version = "1.0.1", features = ["full"] }
