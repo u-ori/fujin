@@ -23,7 +23,7 @@ fn handle_connection(mut stream: TcpStream) {
     //     .take_while(|line| !line.is_empty())
     //     .collect();
 
-    let (status_line, filename) = if request_line == "GET / HTTP/1.1" {/
+    let (status_line, filename) = if request_line == "GET / HTTP/1.1" {
         ("HTTP/1.1 200 OK", "static/index.html")
     } else {
         ("HTTP/1.1 404 NOT FOUND", "static/404.html")
