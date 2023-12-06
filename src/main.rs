@@ -42,6 +42,6 @@ async fn service(req: Request<hyper::body::Incoming>) -> Result<Response<BoxBody
             .body(Full::new(NEEDTOPROXY.into()).map_err(|e| match e {}).boxed())
             .unwrap());
     }
-    // TODO: Put this into static.rs
+
     static_files::serve(&req).await
 }

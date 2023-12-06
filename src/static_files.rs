@@ -40,11 +40,20 @@ pub async fn serve(req: &Request<hyper::body::Incoming>) -> Result<Response<BoxB
             Ok(response)
         },
         _ => {
-            let not_found: &[u8] = b"Not Found";
-            Ok(Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Full::new(not_found.into()).map_err(|e| match e {}).boxed())
-                .unwrap())
+            let file = File::open("static/404.html").await;
+            let file: File = file.unwrap();
+            let reader_stream = ReaderStream::new(file);
+            let stream_body = StreamBody::new(reader_stream.map_ok(Frame::data));
+            let boxed_body = stream_body.boxed();
+
+            // Send response
+            let response = Response::builder()
+                .header("Content-Type", "text/html")
+                .status(StatusCode::OK)
+                .body(boxed_body)
+                .unwrap();
+
+            Ok(response)
         },
     }
 }
