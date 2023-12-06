@@ -1,39 +1,63 @@
-use std::{
-    fs,
-    io::{prelude::*, BufReader},
-    net::{TcpListener, TcpStream},
-};
+use std::convert::Infallible;
+use std::net::SocketAddr;
 
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+use futures_util::TryStreamExt;
+use http_body_util::{Full, StreamBody, combinators::BoxBody, BodyExt};
+use hyper::body::{Bytes, Frame};
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
+use hyper::{Request, Response, Method, StatusCode};
+use hyper_util::rt::TokioIo;
+use tokio::{net::TcpListener, fs::File};
+use tokio_util::io::ReaderStream;
 
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
+static NOTFOUND: &[u8] = b"Not Found";
 
-        handle_connection(stream);
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+
+    let listener = TcpListener::bind(addr).await?;
+
+    loop {
+        let (stream, _) = listener.accept().await?;
+        let io = TokioIo::new(stream);
+
+        tokio::task::spawn(async move {
+            if let Err(err) = http1::Builder::new()
+                .serve_connection(io, service_fn(service))
+                .await
+            {
+                println!("Error serving connection: {:?}", err);
+            }
+        });
     }
 }
 
-fn handle_connection(mut stream: TcpStream) {
-    let buf_reader = BufReader::new(&mut stream);
-    let request_line = buf_reader.lines().next().unwrap().unwrap();
-    // let http_request: Vec<_> = buf_reader
-    //     .lines()
-    //     .map(|result| result.unwrap())
-    //     .take_while(|line| !line.is_empty())
-    //     .collect();
+async fn service(req: Request<hyper::body::Incoming>) -> Result<Response<BoxBody<Bytes, std::io::Error>>, std::io::Error> {
+    println!("{:#?}", req);
+    match (req.method(), req.uri().path()) {
+        (&Method::GET, "/") | (&Method::GET, "/index.html") => {
+            let file = File::open("static/index.html").await;
+            let file: File = file.unwrap();
+            let reader_stream = ReaderStream::new(file);
+            let stream_body = StreamBody::new(reader_stream.map_ok(Frame::data));
+            let boxed_body = stream_body.boxed();
 
-    let (status_line, filename) = if request_line == "GET / HTTP/1.1" {
-        ("HTTP/1.1 200 OK", "static/index.html")
-    } else {
-        ("HTTP/1.1 404 NOT FOUND", "static/404.html")
-    };
+            // Send response
+            let response = Response::builder()
+                .header("Content-Type", "text/html")
+                .status(StatusCode::OK)
+                .body(boxed_body)
+                .unwrap();
 
-    let contents = fs::read_to_string(filename).unwrap();
-    let length = contents.len();
-
-    let response =
-        format!("{status_line}\r\nContent-Length: {length}\r\nContent-Type: text/html\r\n\r\n{contents}");
-
-    stream.write_all(response.as_bytes()).unwrap();
+            Ok(response)
+        },
+        _ => {
+            Ok(Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Full::new(NOTFOUND.into()).map_err(|e| match e {}).boxed())
+                .unwrap())
+        },
+    }
 }
