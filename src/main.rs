@@ -1,16 +1,15 @@
 use std::net::SocketAddr;
 
-use futures_util::TryStreamExt;
-use http_body_util::{Full, StreamBody, combinators::BoxBody, BodyExt};
-use hyper::body::{Bytes, Frame};
+use http_body_util::{Full, combinators::BoxBody, BodyExt};
+use hyper::body::Bytes;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
-use hyper::{Request, Response, Method, StatusCode};
+use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
-use tokio::{net::TcpListener, fs::File};
-use tokio_util::io::ReaderStream;
+use tokio::net::TcpListener;
 
-static NOTFOUND: &[u8] = b"Not Found";
+mod static_files;
+
 static NEEDTOPROXY: &[u8] = b"Need to proxy this request";
 
 #[tokio::main]
@@ -43,46 +42,6 @@ async fn service(req: Request<hyper::body::Incoming>) -> Result<Response<BoxBody
             .body(Full::new(NEEDTOPROXY.into()).map_err(|e| match e {}).boxed())
             .unwrap());
     }
-
     // TODO: Put this into static.rs
-    match (req.method(), req.uri().path()) {
-        (&Method::GET, "/") | (&Method::GET, "/index.html") => {
-            let file = File::open("static/index.html").await;
-            let file: File = file.unwrap();
-            let reader_stream = ReaderStream::new(file);
-            let stream_body = StreamBody::new(reader_stream.map_ok(Frame::data));
-            let boxed_body = stream_body.boxed();
-
-            // Send response
-            let response = Response::builder()
-                .header("Content-Type", "text/html")
-                .status(StatusCode::OK)
-                .body(boxed_body)
-                .unwrap();
-
-            Ok(response)
-        },
-        (&Method::GET, "/debug") => {
-            let file = File::open("static/debug.html").await;
-            let file: File = file.unwrap();
-            let reader_stream = ReaderStream::new(file);
-            let stream_body = StreamBody::new(reader_stream.map_ok(Frame::data));
-            let boxed_body = stream_body.boxed();
-
-            // Send response
-            let response = Response::builder()
-                .header("Content-Type", "text/html")
-                .status(StatusCode::OK)
-                .body(boxed_body)
-                .unwrap();
-
-            Ok(response)
-        },
-        _ => {
-            Ok(Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Full::new(NOTFOUND.into()).map_err(|e| match e {}).boxed())
-                .unwrap())
-        },
-    }
+    static_files::serve(&req).await
 }
