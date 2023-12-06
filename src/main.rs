@@ -36,6 +36,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
 async fn service(req: Request<hyper::body::Incoming>) -> Result<Response<BoxBody<Bytes, std::io::Error>>, std::io::Error> {
     println!("{:#?}", req);
+    if req.uri().path().starts_with("/fujin/") {
+        println!("need to proxy this request");
+    }
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/") | (&Method::GET, "/index.html") => {
             let file = File::open("static/index.html").await;
