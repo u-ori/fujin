@@ -1,4 +1,3 @@
-use std::convert::Infallible;
 use std::net::SocketAddr;
 
 use futures_util::TryStreamExt;
@@ -12,6 +11,7 @@ use tokio::{net::TcpListener, fs::File};
 use tokio_util::io::ReaderStream;
 
 static NOTFOUND: &[u8] = b"Not Found";
+static NEEDTOPROXY: &[u8] = b"Need to proxy this request";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -38,10 +38,32 @@ async fn service(req: Request<hyper::body::Incoming>) -> Result<Response<BoxBody
     println!("{:#?}", req);
     if req.uri().path().starts_with("/fujin/") {
         println!("need to proxy this request");
+        return Ok(Response::builder()
+            .status(StatusCode::OK)
+            .body(Full::new(NEEDTOPROXY.into()).map_err(|e| match e {}).boxed())
+            .unwrap());
     }
+
+    // TODO: Put this into static.rs
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/") | (&Method::GET, "/index.html") => {
             let file = File::open("static/index.html").await;
+            let file: File = file.unwrap();
+            let reader_stream = ReaderStream::new(file);
+            let stream_body = StreamBody::new(reader_stream.map_ok(Frame::data));
+            let boxed_body = stream_body.boxed();
+
+            // Send response
+            let response = Response::builder()
+                .header("Content-Type", "text/html")
+                .status(StatusCode::OK)
+                .body(boxed_body)
+                .unwrap();
+
+            Ok(response)
+        },
+        (&Method::GET, "/debug") => {
+            let file = File::open("static/debug.html").await;
             let file: File = file.unwrap();
             let reader_stream = ReaderStream::new(file);
             let stream_body = StreamBody::new(reader_stream.map_ok(Frame::data));
