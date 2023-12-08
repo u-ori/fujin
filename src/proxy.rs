@@ -9,17 +9,11 @@ use tokio::io::AsyncWriteExt;
 
 pub async fn serve(req: &Request<hyper::body::Incoming>) -> 
     Result<Response<BoxBody<Bytes, std::io::Error>>, std::io::Error> {
-        fetch().await;
-        
-        let need_to_proxy: &[u8] = b"Need to proxy this request";
-        return Ok(Response::builder()
-            .status(StatusCode::OK)
-            .body(Full::new(need_to_proxy.into()).map_err(|e| match e {}).boxed())
-            .unwrap());
+        fetch().await.unwrap()
 }
 
 async fn fetch() ->
-    Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    Result<Result<Response<BoxBody<Bytes, std::io::Error>>, std::io::Error>, Box<dyn std::error::Error + Send + Sync>> {
         let url: hyper::Uri = "http://example.com".parse().unwrap();
         let host = url.host().expect("uri has no host");
         let port = url.port_u16().unwrap_or(80);
@@ -45,10 +39,6 @@ async fn fetch() ->
 
         let mut res = sender.send_request(req).await?;
 
-        println!("Response: {}", res.status());
-        println!("Headers: {:#?}\n", res.headers());
-        // println!("Body: {:#?}\n", res.body());
-
         let mut output: Vec<u8> = Vec::new();
 
         while let Some(next) = res.frame().await {
@@ -58,8 +48,15 @@ async fn fetch() ->
                 output.extend(&chunk[..]);
             }
         }
-        println!("{output:?}");
 
+        let mut response = Response::builder()
+            .status(res.status());
 
-        Ok(())
+        for header in res.headers().keys() {
+            &response.headers_mut().unwrap().insert(header, res.headers().get(header).unwrap().clone());
+        }
+
+        let response = response.body(Full::new(output.into()).map_err(|e| match e {}).boxed());
+
+        Ok(Ok(response.unwrap()))
 }

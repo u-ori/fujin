@@ -33,7 +33,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 }
 
 async fn service(req: Request<hyper::body::Incoming>) -> Result<Response<BoxBody<Bytes, std::io::Error>>, std::io::Error> {
-    println!("{:#?}", req);
     if req.uri().path().starts_with("/fujin/") {
         return proxy::serve(&req).await;
     }
