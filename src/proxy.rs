@@ -47,14 +47,18 @@ async fn fetch() ->
 
         println!("Response: {}", res.status());
         println!("Headers: {:#?}\n", res.headers());
-        println!("Body: {:#?}\n", res.body());
+        // println!("Body: {:#?}\n", res.body());
 
-        // while let Some(next) = res.frame().await {
-        //     let frame = next?;
-        //     if let Some(chunk) = frame.data_ref() {
-        //         io::stdout().write_all(&chunk).await?;
-        //     }
-        // }
+        let mut output: Vec<u8> = Vec::new();
+
+        while let Some(next) = res.frame().await {
+            let frame = next?;
+            if let Some(chunk) = frame.data_ref() {
+                // io::stdout().write_all(&chunk).await?;
+                output.extend(&chunk[..]);
+            }
+        }
+        println!("{output:?}");
 
 
         Ok(())
