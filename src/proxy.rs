@@ -9,12 +9,12 @@ use tokio::io::AsyncWriteExt;
 
 pub async fn serve(req: &Request<hyper::body::Incoming>) -> 
     Result<Response<BoxBody<Bytes, std::io::Error>>, std::io::Error> {
-        fetch().await.unwrap()
+        fetch(&req.uri().path()[7..req.uri().path().len()]).await.unwrap()
 }
 
-async fn fetch() ->
+async fn fetch(req: &str) ->
     Result<Result<Response<BoxBody<Bytes, std::io::Error>>, std::io::Error>, Box<dyn std::error::Error + Send + Sync>> {
-        let url: hyper::Uri = "http://example.com".parse().unwrap();
+        let url: hyper::Uri = req.parse().unwrap();
         let host = url.host().expect("uri has no host");
         let port = url.port_u16().unwrap_or(80);
         let addr = format!("{}:{}", host, port);
@@ -39,12 +39,14 @@ async fn fetch() ->
 
         let mut res = sender.send_request(req).await?;
 
+        println!("Response: {}", res.status());
+        println!("Headers: {:#?}\n", res.headers());
+
         let mut output: Vec<u8> = Vec::new();
 
         while let Some(next) = res.frame().await {
             let frame = next?;
             if let Some(chunk) = frame.data_ref() {
-                // io::stdout().write_all(&chunk).await?;
                 output.extend(&chunk[..]);
             }
         }
